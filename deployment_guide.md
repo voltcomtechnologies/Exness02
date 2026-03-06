@@ -27,39 +27,19 @@ To allow the Vercel frontend to reach your backend:
 5. Name it "NairaFunded-API".
 6. Ensure your VPS provider (e.g., AWS, Azure, DigitalOcean) also has Port 8000 open in their Cloud Dashboard/Security Groups.
 
-### 3. Frontend Deployment
-- Install Node.js.
-- Run `npm install` and `npm run build`.
-- Start the server: `npm start`.
-- Use a reverse proxy like **Nginx** or **IIS** to handle HTTPS and port 80/443 mapping.
+## 🚀 Vercel Deployment (Frontend)
 
----
+Since the project is now a mono-repo, you must update your Vercel project settings:
 
-## 🐧 Alternative: Linux VPS (Ubuntu/Debian)
-If you must use Linux, follow these steps to run MT5 via Wine.
+1.  **Project Name**: `naira-funded-dashboard`
+2.  **GitHub Repo**: Ensure it's linked to `voltcomtechnologies/Exness02`.
+3.  **Root Directory**: Set this to `frontend`. (**CRITICAL**)
+4.  **Framework Preset**: `Next.js`.
+5.  **Environment Variables**:
+    - `NEXT_PUBLIC_API_URL`: `http://<your-vps-ip>:8000`
 
-### 1. Install Wine
-```bash
-sudo dpkg --add-architecture i386
-sudo apt update
-sudo apt install wine64 wine32
-```
-
-### 2. Install MT5 under Wine
-- Use `wine mt5setup.exe` to install the terminal.
-- Note the installation path (usually `~/.wine/drive_c/Program Files/MetaTrader 5`).
-
-### 3. Run Python in Wine
-- To use the `MetaTrader5` library on Linux, you must run the Python interpreter **inside the same Wine prefix** as the MT5 terminal.
-- Install Windows version of Python within Wine: `wine python-installer.exe`.
-- Install dependencies: `wine python -m pip install -r backend/requirements.txt`.
-- Run the backend: `wine python backend/main.py`.
-
-### 4. Headless Display (Optional)
-- Use `Xvfb` (X Virtual Framebuffer) if your VPS is CLI-only:
-  ```bash
-  xvfb-run -a wine python backend/main.py
-  ```
+### To Trigger a Deploy
+Once the settings are saved, any push to the `main` branch will trigger a deployment.
 
 ## 🔄 Updating the Backend
 
