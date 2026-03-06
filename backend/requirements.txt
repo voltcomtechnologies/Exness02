@@ -1,0 +1,7 @@
+fastapi==0.110.0
+uvicorn==0.27.1
+MetaTrader5==5.0.5509
+pandas==2.2.1
+pydantic==2.6.4
+python-dotenv==1.0.1
+sqlalchemy>=2.0.0

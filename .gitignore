@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+ENV/
+
+# Database
+*.db
+*.sqlite3
+
+# ZIP files
+*.zip
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+dist/
+.next/
+out/
+build/
+.env
+.env.local
+
+# API Secrets
+backend/.env
+frontend/.env

@@ -1,0 +1,21 @@
+
+> frontend@0.1.0 dev
+> next dev
+
+Γû▓ Next.js 16.1.4 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.100.111:3000
+
+Γ£ô Starting...
+Γ£ô Ready in 1902ms
+ HEAD / 200 in 961ms (compile: 733ms, render: 227ms)
+ GET / 200 in 54ms (compile: 5ms, render: 48ms)
+ GET / 200 in 161ms (compile: 11ms, render: 150ms)
+Γ£ô Compiled in 159ms
+Γ£ô Compiled in 273ms
+Γ£ô Compiled in 106ms
+Γ£ô Compiled in 79ms
+Γ£ô Compiled in 106ms
+Γ£ô Compiled in 38ms
+Γ£ô Compiled in 67ms
+ GET / 200 in 391ms (compile: 191ms, render: 200ms)
