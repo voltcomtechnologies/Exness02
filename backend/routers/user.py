@@ -6,30 +6,6 @@ from database import get_db
 
 router = APIRouter(prefix="/user", tags=["user"])
 
-@router.get("/messages/{account_id}", response_model=List[schemas.MessageResponse])
-def get_user_messages(account_id: int, db: Session = Depends(get_db)):
-    account_id_str = str(account_id)
-    messages = db.query(models.Message).filter(
-        (models.Message.sender == account_id_str) | (models.Message.receiver == account_id_str)
-    ).order_by(models.Message.timestamp.asc()).all()
-    return messages
-
-@router.post("/messages", response_model=schemas.MessageResponse)
-def send_user_message(account_id: int, payload: schemas.TicketMessageCreate, db: Session = Depends(get_db)):
-    content = payload.content
-    if not content:
-        raise HTTPException(status_code=400, detail="Content cannot be empty")
-        
-    db_msg = models.Message(
-        sender=str(account_id),
-        receiver="admin",
-        content=content
-    )
-    db.add(db_msg)
-    db.commit()
-    db.refresh(db_msg)
-    return db_msg
-
 @router.get("/tickets/{account_id}", response_model=List[schemas.TicketResponse])
 def get_user_tickets(account_id: int, db: Session = Depends(get_db)):
     tickets = db.query(models.Ticket).filter(models.Ticket.account_id == account_id).order_by(models.Ticket.created_at.desc()).all()

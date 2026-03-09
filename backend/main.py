@@ -27,7 +27,7 @@ app.include_router(user.router, prefix="/api")
 async def analyze_account(creds: schemas.AccountCredentials, db: Session = Depends(get_db)):
     try:
         if creds.platform.upper() == "MT5":
-            account_info, trades, equity_history = get_mt5_data(
+            account_info, trades, equity_history, extended_equity_history = get_mt5_data(
                 creds.account_id, 
                 creds.password, 
                 creds.server
@@ -39,8 +39,9 @@ async def analyze_account(creds: schemas.AccountCredentials, db: Session = Depen
                 creds.password, 
                 creds.server
             )
+            extended_equity_history = equity_history
             
-        result = calculate_metrics(account_info, trades, equity_history)
+        result = calculate_metrics(account_info, trades, equity_history, extended_equity_history)
         
         # Intercept and save/update account in database
         db_account = db.query(models.Account).filter(models.Account.account_id == creds.account_id).first()

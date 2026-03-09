@@ -33,8 +33,11 @@ interface AnalysisResult {
   "Drawdown Alert": boolean;
   Result: string;
   "Request(s)": string;
-  History?: Trade[];
+  "History"?: Trade[];
   "Equity History"?: EquityPoint[];
+  "Extended Equity History"?: EquityPoint[];
+  "Breach Date"?: string | null;
+  "Scalping Breach Date"?: string | null;
 }
 
 interface EquityPoint {
@@ -58,14 +61,12 @@ const sidebarItems = [
   { id: 'dashboard', icon: '⊞', label: 'Dashboard' },
   { id: 'overview', icon: '📊', label: 'Account Overview' },
   { id: 'history', icon: '📋', label: 'Trade History' },
-  { id: 'messages', icon: '💬', label: 'Messages' },
   { id: 'support', icon: '🎫', label: 'Support Tickets' },
 ];
 
 const appItems = [
   { id: 'news', icon: '📰', label: 'News Feed' },
   { id: 'calendar', icon: '📅', label: 'Economic Calendar' },
-  { id: 'mt5web', icon: '📉', label: 'MetaTrader 5 Web' },
 ];
 
 const currencySymbols: { [key: string]: string } = {
@@ -95,8 +96,6 @@ export default function Home() {
   const [accounts, setAccounts] = useState<any[]>([]);
 
   // CRM States
-  const [messages, setMessages] = useState<any[]>([]);
-  const [replyContent, setReplyContent] = useState("");
   const [tickets, setTickets] = useState<any[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<any | null>(null);
   const [ticketSubject, setTicketSubject] = useState("");
@@ -126,39 +125,8 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'messages' && result) fetchMessages();
     if (activeTab === 'support' && result) fetchTickets();
   }, [activeTab, result]);
-
-  const fetchMessages = async () => {
-    if (!formData.account_id) return;
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const res = await fetch(`${apiUrl}/api/user/messages/${formData.account_id}`);
-      const data = await res.json();
-      setMessages(data);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const sendMessage = async () => {
-    if (!replyContent.trim() || !formData.account_id) return;
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const res = await fetch(`${apiUrl}/api/user/messages?account_id=${formData.account_id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: replyContent })
-      });
-      if (res.ok) {
-        setReplyContent("");
-        fetchMessages();
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
 
   const fetchTickets = async () => {
     if (!formData.account_id) return;
@@ -212,6 +180,8 @@ export default function Home() {
       console.error(err);
     }
   };
+
+
 
 
   const analyzeAccount = async (creds: any) => {
@@ -553,7 +523,7 @@ export default function Home() {
                         </linearGradient>
                       </defs>
                       {(() => {
-                        const history = result["Equity History"]!;
+                        const history = result["Extended Equity History"] || result["Equity History"]!;
                         const equities = history.map(h => h.equity);
 
                         // Pre-calculate trailing peak and drawdown limits
@@ -675,17 +645,21 @@ export default function Home() {
 
                 {/* New: Account Pass Analysis Card */}
                 <div className="glass-panel" style={{
-                  background: parseVal(result["Total P/L"]) >= (parseVal(result["Account Size"]) * 0.1)
-                    ? 'linear-gradient(135deg, rgba(46, 213, 115, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%)'
-                    : 'rgba(255, 255, 255, 0.03)',
-                  border: parseVal(result["Total P/L"]) >= (parseVal(result["Account Size"]) * 0.1)
-                    ? '1px solid rgba(46, 213, 115, 0.3)'
-                    : '1px solid var(--border-glass)'
+                  background: (result["Breach Date"] || result["Scalp Trades"] > 0)
+                    ? 'linear-gradient(135deg, rgba(255, 69, 58, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%)'
+                    : parseVal(result["Total P/L"]) >= (parseVal(result["Account Size"]) * 0.1)
+                      ? 'linear-gradient(135deg, rgba(46, 213, 115, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%)'
+                      : 'rgba(255, 255, 255, 0.03)',
+                  border: (result["Breach Date"] || result["Scalp Trades"] > 0)
+                    ? '1px solid rgba(255, 69, 58, 0.3)'
+                    : parseVal(result["Total P/L"]) >= (parseVal(result["Account Size"]) * 0.1)
+                      ? '1px solid rgba(46, 213, 115, 0.3)'
+                      : '1px solid var(--border-glass)'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
                     <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>Account Pass Analysis</h3>
-                    <div className={`badge ${parseVal(result["Total P/L"]) >= (parseVal(result["Account Size"]) * 0.1) ? 'badge-success' : 'badge-warning'}`}>
-                      {parseVal(result["Total P/L"]) >= (parseVal(result["Account Size"]) * 0.1) ? 'TARGET HIT' : 'IN PROGRESS'}
+                    <div className={`badge ${(result["Breach Date"] || result["Scalp Trades"] > 0) ? 'badge-error' : (parseVal(result["Total P/L"]) >= (parseVal(result["Account Size"]) * 0.1) ? 'badge-success' : 'badge-warning')}`}>
+                      {(result["Breach Date"] || result["Scalp Trades"] > 0) ? 'BREACHED' : (parseVal(result["Total P/L"]) >= (parseVal(result["Account Size"]) * 0.1) ? 'TARGET HIT' : 'IN PROGRESS')}
                     </div>
                   </div>
 
@@ -705,7 +679,32 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {parseVal(result["Total P/L"]) >= (parseVal(result["Account Size"]) * 0.1) && (
+                  {(result["Breach Date"] || result["Scalp Trades"] > 0) ? (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      style={{
+                        padding: '1rem',
+                        background: 'rgba(255, 69, 58, 0.1)',
+                        borderRadius: '12px',
+                        border: '1px solid rgba(255, 69, 58, 0.2)',
+                        textAlign: 'center'
+                      }}
+                    >
+                      <p style={{ fontSize: '1.2rem', marginBottom: '0.25rem' }}>⚠️</p>
+                      <p style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--accent-red)' }}>Account Breached</p>
+                      {result["Breach Date"] && (
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                          Maximum drawdown limit breached on <strong>{result["Breach Date"]}</strong>.
+                        </p>
+                      )}
+                      {result["Scalp Trades"] > 0 && (
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                          Scalping rule (trade &le; 5 minutes) breached {result["Scalping Breach Date"] ? <span>on <strong>{result["Scalping Breach Date"]}</strong></span> : "during trading"}.
+                        </p>
+                      )}
+                    </motion.div>
+                  ) : parseVal(result["Total P/L"]) >= (parseVal(result["Account Size"]) * 0.1) ? (
                     <motion.div
                       initial={{ opacity: 0, scale: 0.95 }}
                       animate={{ opacity: 1, scale: 1 }}
@@ -721,7 +720,7 @@ export default function Home() {
                       <p style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--accent-green)' }}>Congratulations!</p>
                       <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>You have successfully completed this stage.</p>
                     </motion.div>
-                  )}
+                  ) : null}
                 </div>
               </motion.div>
             </section>
@@ -885,58 +884,7 @@ export default function Home() {
           </motion.div>
         )}
 
-        {activeTab === 'mt5web' && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="glass-panel"
-            style={{
-              height: 'calc(100vh - 120px)',
-              margin: '0 1rem 1rem 1rem',
-              padding: '0',
-              overflow: 'hidden',
-              display: 'flex',
-              flexDirection: 'column'
-            }}
-          >
-            <div style={{
-              padding: '0.75rem 1.5rem',
-              borderBottom: '1px solid var(--border-glass)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              background: 'rgba(255,255,255,0.02)'
-            }}>
-              <div>
-                <h2 style={{ fontSize: '1rem', fontWeight: 700 }}>MetaTrader 5 Web Terminal</h2>
-                <p style={{ fontSize: '0.7rem', color: 'var(--text-mute)' }}>Secure access to your Exness trading terminal</p>
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button
-                  onClick={() => window.open('https://www.exness.com/webterminal', '_blank')}
-                  className="btn-icon"
-                  style={{ width: '32px', height: '32px', fontSize: '0.8rem' }}
-                  title="Open in new tab"
-                >
-                  ↗
-                </button>
-              </div>
-            </div>
-            <div style={{ flex: 1, position: 'relative' }}>
-              <iframe
-                src="https://www.exness.com/webterminal"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  border: 'none',
-                  background: 'white' // WebTerminal usually has its own theme, but white ensures it's visible while loading
-                }}
-                title="MetaTrader 5 Web"
-                allow="fullscreen"
-              />
-            </div>
-          </motion.div>
-        )}
+
 
         {activeTab === 'history' && (
           <motion.div
@@ -1013,45 +961,6 @@ export default function Home() {
           </motion.div>
         )}
 
-        {activeTab === 'messages' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass-panel chat-single mobile-padding">
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '1.5rem', borderBottom: '1px solid var(--border-glass)', paddingBottom: '1rem' }}>Admin Messages</h2>
-            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem', paddingRight: '1rem', marginBottom: '1rem' }}>
-              {messages.map((msg: any) => (
-                <div key={msg.id} style={{ alignSelf: msg.sender !== 'admin' ? 'flex-end' : 'flex-start', maxWidth: '70%' }}>
-                  <div style={{
-                    padding: '0.75rem 1rem',
-                    borderRadius: '12px',
-                    background: msg.sender !== 'admin' ? 'var(--accent-teal)' : 'rgba(255,255,255,0.05)',
-                    color: msg.sender !== 'admin' ? '#000' : '#fff'
-                  }}>
-                    {msg.content}
-                  </div>
-                  <p style={{ fontSize: '0.65rem', color: 'var(--text-mute)', marginTop: '0.25rem', textAlign: msg.sender !== 'admin' ? 'right' : 'left' }}>
-                    {new Date(msg.timestamp).toLocaleString()}
-                  </p>
-                </div>
-              ))}
-              {messages.length === 0 && (
-                <p style={{ color: 'var(--text-mute)', textAlign: 'center', marginTop: '2rem' }}>No messages found. Start a conversation with the admin.</p>
-              )}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <textarea
-                value={replyContent}
-                onChange={(e) => setReplyContent(e.target.value)}
-                placeholder="Type a message..."
-                className="input-field"
-                style={{ width: '100%', resize: 'none', height: '120px', fontFamily: 'inherit', boxSizing: 'border-box' }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-                }}
-              />
-              <button onClick={sendMessage} className="btn-primary" style={{ width: '100%', padding: '0.75rem' }}>Send</button>
-            </div>
-          </motion.div>
-        )}
-
         {activeTab === 'support' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             {!selectedTicket ? (
@@ -1061,7 +970,7 @@ export default function Home() {
                     <h2 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Support Tickets</h2>
                     <p style={{ color: 'var(--text-mute)', fontSize: '0.85rem', marginTop: '0.5rem' }}>Open a ticket to get help from the admin team.</p>
                   </div>
-                  <div className="ticket-create-form">
+                  <div className="ticket-create-form" style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
                     <input
                       type="text"
                       placeholder="Ticket Subject..."
@@ -1075,7 +984,7 @@ export default function Home() {
                 </div>
 
                 {/* Desktop Table */}
-                <div className="table-responsive desktop-table">
+                <div className="table-responsive desktop-table" style={{ marginTop: '2rem' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid var(--border-glass)', textAlign: 'left' }}>
@@ -1087,7 +996,7 @@ export default function Home() {
                       </tr>
                     </thead>
                     <tbody>
-                      {tickets.map((t: any) => (
+                      {tickets && tickets.length > 0 ? tickets.map((t: any) => (
                         <tr key={t.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                           <td style={{ padding: '1rem', fontWeight: 600 }}>#{t.id}</td>
                           <td style={{ padding: '1rem', color: 'var(--accent-teal)' }}>{t.subject}</td>
@@ -1099,14 +1008,18 @@ export default function Home() {
                             <button onClick={() => setSelectedTicket(t)} className="btn-icon" style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem' }}>View</button>
                           </td>
                         </tr>
-                      ))}
+                      )) : (
+                        <tr>
+                          <td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-mute)' }}>No support tickets found.</td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
 
                 {/* Mobile Card View */}
                 <div className="mobile-card-list">
-                  {tickets.map((t: any) => (
+                  {tickets && tickets.map((t: any) => (
                     <div key={t.id} className="mobile-trade-card" onClick={() => setSelectedTicket(t)} style={{ cursor: 'pointer' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                         <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>#{t.id}</span>
@@ -1120,7 +1033,7 @@ export default function Home() {
               </div>
             ) : (
               <div className="glass-panel mobile-padding" style={{ padding: '2rem' }}>
-                <div className="ticket-detail-header">
+                <div className="ticket-detail-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                   <div>
                     <h2 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Ticket #{selectedTicket.id}: {selectedTicket.subject}</h2>
                     <p style={{ color: 'var(--text-mute)', fontSize: '0.85rem', marginTop: '0.5rem' }}>
@@ -1155,24 +1068,26 @@ export default function Home() {
                 </div>
 
                 {selectedTicket.status !== 'Resolved' && (
-                  <div style={{ display: 'flex', gap: '1rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     <textarea
                       value={ticketReplyContent}
                       onChange={(e) => setTicketReplyContent(e.target.value)}
                       placeholder="Type a reply..."
                       className="input-field"
-                      style={{ flex: 1, resize: 'none', height: '60px', fontFamily: 'inherit' }}
+                      style={{ width: '100%', resize: 'none', height: '100px', fontFamily: 'inherit', boxSizing: 'border-box' }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendTicketReply(); }
                       }}
                     />
-                    <button onClick={sendTicketReply} className="btn-primary" style={{ padding: '0 1.5rem' }}>Reply</button>
+                    <button onClick={sendTicketReply} className="btn-primary" style={{ padding: '0.75rem', alignSelf: 'flex-start' }}>Reply</button>
                   </div>
                 )}
               </div>
             )}
           </motion.div>
         )}
+
+
 
         <footer style={{ marginTop: '3rem', textAlign: 'center', color: 'var(--text-mute)', fontSize: '0.8rem' }}>
           <p>© 2026 NairaFunded Analyzer. Real-time data sync active. Last Checked: {result["Checked Time"]}</p>

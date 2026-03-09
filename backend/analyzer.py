@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 
-def calculate_metrics(account_info, trades, equity_history):
+def calculate_metrics(account_info, trades, equity_history, extended_equity_history=None):
     """
     Calculates the required trading metrics.
     """
@@ -17,10 +17,14 @@ def calculate_metrics(account_info, trades, equity_history):
     # 2. Scalp Trades
     scalp_count = 0
     total_trades = len(trades)
+    first_scalp_date = None
+    
     for t in trades:
         duration = (t['close_time'] - t['open_time']).total_seconds()
         if duration <= 300: # 5 minutes
             scalp_count += 1
+            if first_scalp_date is None or t['close_time'] < first_scalp_date:
+                first_scalp_date = t['close_time']
     
     scalp_percent = (scalp_count / total_trades * 100) if total_trades > 0 else 0
 
@@ -44,7 +48,7 @@ def calculate_metrics(account_info, trades, equity_history):
         equity_series = pd.Series(values, index=times)
         running_max = equity_series.cummax()
         
-        # Drawdown calculation
+        # Drawdown calculation from closed-deal equity curve
         # dd = (current - max) / max
         drawdowns = (equity_series - running_max) / running_max
         max_dd = abs(drawdowns.min() * 100) if not drawdowns.empty else 0
@@ -77,13 +81,85 @@ def calculate_metrics(account_info, trades, equity_history):
         
         drawdown_time = longest_dd_duration
 
+    # --- Per-Trade Intra-Trade Drawdown ---
+    # Walk through trades chronologically. For each trade, compute the worst
+    # equity dip it caused *during* its lifetime using worst_unrealised_pl
+    # (estimated from OHLC bars in mt_bridge.py).
+    # The overall max drawdown is the worst of:
+    #   1. The equity-curve-based max_dd (from closed deal snapshots)
+    #   2. Any per-trade intra-trade drawdown
+    
+    intra_trade_max_dd = 0.0
+    ever_hit_20_pct = False
+    breach_date = None
+    
+    if equity_history:
+        breaches = drawdowns[drawdowns <= -0.2]
+        if not breaches.empty:
+            ever_hit_20_pct = True
+            breach_date = breaches.index[0]
+            
+    if trades and equity_history:
+        # Sort trades by open_time
+        sorted_trades = sorted(trades, key=lambda t: t['open_time'])
+        
+        equity_values = [e[1] for e in equity_history]
+        equity_times = [e[0] for e in equity_history]
+        
+        for t in sorted_trades:
+            worst_pl = t.get('worst_unrealised_pl', 0.0)
+            if worst_pl >= 0:
+                continue  # Trade never went negative, skip
+            
+            # Find the equity level just before/at this trade's open time
+            # (the running peak equity at the trade's open)
+            trade_open = t['open_time']
+            
+            # Find the last equity snapshot at or before trade_open
+            peak_at_open = equity_values[0] if equity_values else initial_balance
+            for i, et in enumerate(equity_times):
+                if et <= trade_open:
+                    peak_at_open = max(peak_at_open, equity_values[i])
+                else:
+                    break
+            
+            if peak_at_open <= 0:
+                continue
+            
+            # The worst equity during this trade = equity_at_open + worst_unrealised_pl
+            # But we care about drawdown from peak, so:
+            # equity_at_open is the equity when the trade was opened (approximated
+            # by the last equity snapshot). The worst dip is equity_at_open + worst_pl.
+            # Find the actual equity at trade open (not peak, just current)
+            equity_at_open = equity_values[0] if equity_values else initial_balance
+            for i, et in enumerate(equity_times):
+                if et <= trade_open:
+                    equity_at_open = equity_values[i]
+                else:
+                    break
+            
+            worst_equity_during_trade = equity_at_open + worst_pl
+            trade_dd_from_peak = abs((worst_equity_during_trade - peak_at_open) / peak_at_open * 100) if peak_at_open > 0 else 0
+            
+            if trade_dd_from_peak > intra_trade_max_dd:
+                intra_trade_max_dd = trade_dd_from_peak
+            
+            if trade_dd_from_peak >= 20.0:
+                ever_hit_20_pct = True
+                if breach_date is None or t['open_time'] < breach_date:
+                    breach_date = t['open_time']
+
+    # Overall max DD = worst of equity-curve DD and intra-trade DD
+    max_dd = max(max_dd, intra_trade_max_dd)
+
     # Evaluation
     # PASS if:
-    # - Maximum DD <= 20%
+    # - Maximum DD <= 20% AND no trade ever hit 20% intra-trade drawdown
     # - Loss from Peak <= 5%
     # - No Scalp Trades allowed (duration > 5 mins)
     
-    is_pass = (max_dd <= 20.0 and 
+    is_pass = (not ever_hit_20_pct and 
+               max_dd <= 20.0 and
                loss_from_peak <= 5.0 and 
                scalp_count == 0)
     
@@ -132,8 +208,9 @@ def calculate_metrics(account_info, trades, equity_history):
     avg_loss = sum(losses) / len(losses) if losses else 0.0
     risk_per_trade = (avg_loss / initial_balance * 100) if initial_balance > 0 else 0.0
 
-    # Evaluation
-    is_pass = (max_dd <= 20.0 and 
+    # Evaluation (final — includes intra-trade drawdown)
+    is_pass = (not ever_hit_20_pct and
+               max_dd <= 20.0 and 
                loss_from_peak <= 5.0 and 
                scalp_count == 0)
     
@@ -178,7 +255,9 @@ def calculate_metrics(account_info, trades, equity_history):
         "Maximum DD": f"{max_dd:.2f}%",
         "Loss from Peak": f"{sym}{loss_from_peak_currency:,.2f}",
         "Drawdown Time": str_drawdown_time(drawdown_time),
-        "Drawdown Alert": max_dd >= 20.0,
+        "Drawdown Alert": ever_hit_20_pct,
+        "Breach Date": breach_date.strftime("%Y-%m-%d %H:%M") if breach_date else None,
+        "Scalping Breach Date": first_scalp_date.strftime("%Y-%m-%d %H:%M") if first_scalp_date else None,
         "Result": result,
         "Request(s)": "Success",
         "History": [
@@ -196,6 +275,9 @@ def calculate_metrics(account_info, trades, equity_history):
         ],
         "Equity History": [
             {"time": e[0], "equity": e[1]} for e in equity_history
+        ],
+        "Extended Equity History": [
+            {"time": e[0], "equity": e[1]} for e in (extended_equity_history or equity_history)
         ]
     }
 
